@@ -130,9 +130,7 @@ def benchmark():
             axs[i].set_yscale('log')
             
     plt.tight_layout()
-    import os
-    os.makedirs('../Visualizations', exist_ok=True)
-    plt.savefig('../Visualizations/task1_performance.png')
+    plt.savefig('Visualizations/task1_performance.png')
     print("Benchmark complete. Results saved to ../Visualizations/task1_performance.png")
 
 if __name__ == "__main__":

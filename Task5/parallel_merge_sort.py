@@ -178,3 +178,102 @@ def validate(sorted_list):
             return False
 
     return True
+    # Task 5 Runner
+
+def run_task5():
+
+    print("Task 5 : Concurrent Programming")
+
+    dataset = load_data("Data\world_cities_data.csv", limit=10000)
+    print(f"Loaded {len(dataset)} cities.")
+    thread_counts = [1, 2, 4, 8]
+    execution_times = []
+    for threads in thread_counts:
+        runtime, sorted_data = benchmark(dataset, threads)
+        execution_times.append(runtime)
+        print(
+            f"Threads : {threads} | "
+            f"Time : {runtime:.4f} sec | "
+            f"Sorted : {validate(sorted_data)}"
+        )
+    # Speedup Calculation
+    sequential_time = execution_times[0]
+    speedups = []
+    for t in execution_times:
+        speedups.append(sequential_time / t)
+    print("\nSpeedup Results")
+    for threads, speed in zip(thread_counts, speedups):
+
+        print(f"{threads} Threads -> {speed:.2f}x")
+    os.makedirs("Visualizations", exist_ok=True)
+    # Execution Time Graph
+    plt.figure(figsize=(8, 6))
+    plt.plot(
+        thread_counts,
+        execution_times,
+        marker="o",
+        linewidth=2
+    )
+
+    plt.title(
+        "Execution Time vs Thread Count",
+        fontsize=16,
+        fontweight="bold"
+    )
+
+    plt.xlabel("Number of Threads")
+    plt.ylabel("Execution Time (seconds)")
+    plt.grid(True)
+
+    plt.savefig(
+        "Visualizations/task5_execution_time.png",
+        dpi=300,
+        bbox_inches="tight"
+    )
+
+    plt.close()
+
+    # Speedup Graph
+
+    plt.figure(figsize=(8, 6))
+
+    plt.plot(
+        thread_counts,
+        speedups,
+        marker="o",
+        linewidth=2,
+        label="Measured Speedup"
+    )
+
+    plt.plot(
+        thread_counts,
+        thread_counts,
+        linestyle="--",
+        label="Ideal Speedup"
+    )
+
+    plt.title(
+        "Speedup vs Thread Count",
+        fontsize=16,
+        fontweight="bold"
+    )
+
+    plt.xlabel("Number of Threads")
+    plt.ylabel("Speedup (x)")
+    plt.legend()
+    plt.grid(True)
+
+    plt.savefig(
+        "Visualizations/task5_speedup.png",
+        dpi=300,
+        bbox_inches="tight"
+    )
+
+    plt.close()
+
+    print("\nVisualizations Saved:")
+
+# Main Function
+
+if __name__ == "__main__":
+    run_task5()

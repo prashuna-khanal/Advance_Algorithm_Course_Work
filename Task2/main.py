@@ -189,5 +189,59 @@ def run_task2():
         print("Saved ../Visualizations/task2_prim_mst.png")
         plt.close()
 
+    # Draw Bellman-Ford Negative Cycle
+    if has_neg_cycle:
+        bf_g = nx.DiGraph()
+        for u in g.adj_list:
+            for v, w in g.adj_list[u]:
+                bf_g.add_edge(u, v, weight=round(w, 2))
+                
+        plt.style.use('seaborn-v0_8-darkgrid')
+        plt.figure(figsize=(16, 12))
+        pos = {node: (g.vertices[node][1], g.vertices[node][0]) for node in bf_g.nodes()}
+        
+        node_sizes = [200 + 30 * bf_g.degree(node) for node in bf_g.nodes()]
+        
+        edges = bf_g.edges(data=True)
+        pos_edges = [(u, v) for u, v, data in edges if data['weight'] >= 0]
+        neg_edges = [(u, v) for u, v, data in edges if data['weight'] < 0]
+        
+        # Draw nodes
+        nx.draw_networkx_nodes(bf_g, pos, node_color='lightsteelblue', node_size=node_sizes, alpha=0.7)
+        
+        # Draw faint non-negative edges
+        nx.draw_networkx_edges(bf_g, pos, edgelist=pos_edges, edge_color='gray', width=0.5, alpha=0.2)
+        
+        # Draw bold negative edges with a slight curve to prevent overlap
+        nx.draw_networkx_edges(bf_g, pos, edgelist=neg_edges, edge_color='red', width=3, arrows=True, arrowsize=25, connectionstyle='arc3,rad=0.1')
+        
+        # Labels for nodes in the negative cycle (bold, red border)
+        neg_nodes = set([u for u, v in neg_edges] + [v for u, v in neg_edges])
+        labels_neg = {n: n for n in neg_nodes}
+        nx.draw_networkx_labels(bf_g, pos, labels=labels_neg, font_size=12, font_weight='bold', bbox=dict(facecolor='white', edgecolor='red', alpha=0.9, pad=0.3))
+        
+        # Labels for other nodes (faint, small)
+        labels_other = {n: n for n in bf_g.nodes() if n not in neg_nodes}
+        nx.draw_networkx_labels(bf_g, pos, labels=labels_other, font_size=8, font_color='gray', alpha=0.6)
+        
+        neg_edge_labels = {(u, v): f"{data['weight']}" for u, v, data in edges if data['weight'] < 0}
+        nx.draw_networkx_edge_labels(bf_g, pos, edge_labels=neg_edge_labels, font_color='red', font_size=11, font_weight='bold')
+        
+        plt.title(f"Bellman-Ford Negative Weight Cycle Detection", fontsize=20, fontweight='bold', pad=20)
+        
+        plt.text(
+            0.02,
+            0.02,
+            f"Negative Cycle Detected!\n\n"
+            f"Cycle Edges:\n{u1} -> {v1} (-10000)\n{u2} -> {v2} (-10000)\n{u3} -> {v3} (-10000)",
+            transform=plt.gca().transAxes,
+            fontsize=12,
+            bbox=dict(facecolor='mistyrose', edgecolor='red', alpha=0.9, boxstyle='round,pad=0.5')
+        )
+        
+        plt.savefig(os.path.join(output_folder, "task2_bellman_ford.png"), dpi=300, bbox_inches='tight')
+        print("Saved ../Visualizations/task2_bellman_ford.png")
+        plt.close()
+
 if __name__ == "__main__":
     run_task2()

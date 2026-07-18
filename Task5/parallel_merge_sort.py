@@ -1,279 +1,156 @@
 import csv
 import os
 import time
-import threading
+import concurrent.futures
 import matplotlib.pyplot as plt
 
-# City Class
+# ====================== City Class ======================
 class City:
     def __init__(self, name, population):
         self.name = name
-        self.population = float(population) if population else 0
+        self.population = float(population) if population else 0.0
 
-    def __repr__(self):
-        return f"{self.name} ({self.population})"
-
-# Load Dataset
-
-def load_data(filepath, limit=None):
+# ====================== Load Dataset ======================
+def load_data(filepath, limit=10000):
     cities = []
-
     with open(filepath, mode="r", encoding="utf-8") as file:
         reader = csv.DictReader(file)
-
         count = 0
-
         for row in reader:
-
-            if limit and count >= limit:
+            if count >= limit:
                 break
-
             try:
-                cities.append(
-                    City(
-                        row["city"],
-                        row["population"]
-                    )
-                )
+                cities.append(City(row["city"], row["population"]))
                 count += 1
-
-            except ValueError:
+            except (ValueError, KeyError):
                 continue
-
     return cities
 
-# Merge Function
-merge_lock = threading.Lock()
+# ====================== Merge ======================
 def merge(left, right):
-    # Critical Section protected by Mutex
-    with merge_lock:
+    merged = []
+    i = j = 0
+    while i < len(left) and j < len(right):
+        if left[i].population <= right[j].population:
+            merged.append(left[i])
+            i += 1
+        else:
+            merged.append(right[j])
+            j += 1
+    merged.extend(left[i:])
+    merged.extend(right[j:])
+    return merged
 
-        merged = []
-
-        i = 0
-        j = 0
-
-        while i < len(left) and j < len(right):
-
-            if left[i].population <= right[j].population:
-                merged.append(left[i])
-                i += 1
-            else:
-                merged.append(right[j])
-                j += 1
-
-        merged.extend(left[i:])
-        merged.extend(right[j:])
-
-        return merged
-# Sequential Merge Sort
+# ====================== Sequential Merge Sort ======================
 def sequential_merge_sort(arr):
-
     if len(arr) <= 1:
         return arr
-
     mid = len(arr) // 2
-
     left = sequential_merge_sort(arr[:mid])
     right = sequential_merge_sort(arr[mid:])
-
     return merge(left, right)
 
-# Thread Counter
-class ThreadCounter:
-
-    def __init__(self):
-
-        self.count = 0
-        self.lock = threading.Lock()
-
-    def increment(self):
-
-        with self.lock:
-            self.count += 1
-
-    def decrement(self):
-
-        with self.lock:
-            self.count -= 1
-active_threads = ThreadCounter()
-# Parallel Merge Sort
-def parallel_merge_sort(arr, semaphore):
-
+# ====================== Parallel Version (Stable Chunk Method) ======================
+def parallel_merge_sort(arr, executor, num_workers):
     if len(arr) <= 1:
         return arr
 
-    mid = len(arr) // 2
+    # Divide into chunks
+    chunk_size = max(500, len(arr) // (num_workers * 2))
+    chunks = [arr[i:i + chunk_size] for i in range(0, len(arr), chunk_size)]
+    
+    # Sort all chunks in parallel
+    sorted_chunks = list(executor.map(sequential_merge_sort, chunks))
+    
+    # Merge chunks sequentially (like merge sort tree)
+    while len(sorted_chunks) > 1:
+        merged_chunks = []
+        for i in range(0, len(sorted_chunks), 2):
+            if i + 1 < len(sorted_chunks):
+                merged_chunks.append(merge(sorted_chunks[i], sorted_chunks[i+1]))
+            else:
+                merged_chunks.append(sorted_chunks[i])
+        sorted_chunks = merged_chunks
+    
+    return sorted_chunks[0]
 
-    left_half = arr[:mid]
-    right_half = arr[mid:]
-
-    left_sorted = []
-    right_sorted = []
-
-    # Try to create a new thread if a semaphore permit is available
-    if semaphore.acquire(blocking=False):
-
-        active_threads.increment()
-
-        def sort_left():
-
-            nonlocal left_sorted
-
-            left_sorted = parallel_merge_sort(left_half, semaphore)
-
-            active_threads.decrement()
-
-            semaphore.release()
-
-        thread = threading.Thread(target=sort_left)
-
-        thread.start()
-
-        # Main thread works on right half
-        right_sorted = parallel_merge_sort(right_half, semaphore)
-
-        # Wait until left thread finishes
-        thread.join()
-
-    else:
-
-        # No thread available
-        left_sorted = parallel_merge_sort(left_half, semaphore)
-        right_sorted = parallel_merge_sort(right_half, semaphore)
-
-    return merge(left_sorted, right_sorted)
-# Benchmark Function
-def benchmark(dataset, thread_count):
-
-    # One thread means sequential implementation
-    if thread_count == 1:
-
-        start = time.perf_counter()
-
-        result = sequential_merge_sort(dataset.copy())
-
-        runtime = time.perf_counter() - start
-
-        return runtime, result
-
-    # Limit number of worker threads
-    semaphore = threading.Semaphore(thread_count - 1)
-
+# ====================== Benchmark ======================
+def benchmark(dataset, max_workers):
     start = time.perf_counter()
-
-    result = parallel_merge_sort(dataset.copy(), semaphore)
-
+    
+    if max_workers == 1:
+        result = sequential_merge_sort(dataset.copy())
+    else:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+            result = parallel_merge_sort(dataset.copy(), executor, max_workers)
+    
     runtime = time.perf_counter() - start
-
     return runtime, result
 
-# Validation
-
+# ====================== Validation ======================
 def validate(sorted_list):
-
     for i in range(len(sorted_list) - 1):
-
         if sorted_list[i].population > sorted_list[i + 1].population:
             return False
-
     return True
-    # Task 5 Runner
 
+# ====================== Main ======================
 def run_task5():
+    print("6. Task 5 – Concurrent Programming\n")
+    
+    dataset = load_data("Data/world_cities_data.csv", limit=10000)
+    print(f"Dataset loaded: {len(dataset)} cities\n")
 
-    print("Task 5 : Concurrent Programming")
-
-    dataset = load_data("Data\world_cities_data.csv", limit=10000)
-    print(f"Loaded {len(dataset)} cities.")
     thread_counts = [1, 2, 4, 8]
     execution_times = []
+    speedups = []
+    sequential_time = None
+
+    print("EXPERIMENTAL RESULTS")
+    print("-" * 50)
+
     for threads in thread_counts:
+        print(f"Running with {threads} thread{'s' if threads > 1 else ''}...", end=" ")
         runtime, sorted_data = benchmark(dataset, threads)
         execution_times.append(runtime)
-        print(
-            f"Threads : {threads} | "
-            f"Time : {runtime:.4f} sec | "
-            f"Sorted : {validate(sorted_data)}"
-        )
-    # Speedup Calculation
-    sequential_time = execution_times[0]
-    speedups = []
-    for t in execution_times:
-        speedups.append(sequential_time / t)
-    print("\nSpeedup Results")
-    for threads, speed in zip(thread_counts, speedups):
+        
+        valid = validate(sorted_data)
+        print(f"Done → {runtime:.4f} seconds | Valid: {valid}")
+        
+        if threads == 1:
+            sequential_time = runtime
+        speedups.append(sequential_time / runtime)
 
-        print(f"{threads} Threads -> {speed:.2f}x")
+    print("\nSPEEDUP RESULTS")
+    print("-" * 50)
+    for t, s in zip(thread_counts, speedups):
+        print(f"{t} Threads → {s:.2f}x Speedup")
+
+    # ====================== Graphs ======================
     os.makedirs("Visualizations", exist_ok=True)
-    # Execution Time Graph
-    plt.figure(figsize=(8, 6))
-    plt.plot(
-        thread_counts,
-        execution_times,
-        marker="o",
-        linewidth=2
-    )
-
-    plt.title(
-        "Execution Time vs Thread Count",
-        fontsize=16,
-        fontweight="bold"
-    )
-
+    
+    plt.figure(figsize=(9, 6))
+    plt.plot(thread_counts, execution_times, marker='o', linewidth=2.5, color='blue')
+    plt.title("Execution Time vs Thread Count")
     plt.xlabel("Number of Threads")
     plt.ylabel("Execution Time (seconds)")
-    plt.grid(True)
-
-    plt.savefig(
-        "Visualizations/task5_execution_time.png",
-        dpi=300,
-        bbox_inches="tight"
-    )
-
+    plt.grid(True, alpha=0.3)
+    plt.savefig("Visualizations/task5_execution_time.png", dpi=300, bbox_inches='tight')
     plt.close()
 
-    # Speedup Graph
-
-    plt.figure(figsize=(8, 6))
-
-    plt.plot(
-        thread_counts,
-        speedups,
-        marker="o",
-        linewidth=2,
-        label="Measured Speedup"
-    )
-
-    plt.plot(
-        thread_counts,
-        thread_counts,
-        linestyle="--",
-        label="Ideal Speedup"
-    )
-
-    plt.title(
-        "Speedup vs Thread Count",
-        fontsize=16,
-        fontweight="bold"
-    )
-
+    plt.figure(figsize=(9, 6))
+    plt.plot(thread_counts, speedups, marker='o', linewidth=2.5, label="Measured Speedup", color='blue')
+    plt.plot(thread_counts, thread_counts, linestyle='--', label="Ideal Speedup", color='orange')
+    plt.title("Speedup vs Thread Count")
     plt.xlabel("Number of Threads")
     plt.ylabel("Speedup (x)")
     plt.legend()
-    plt.grid(True)
-
-    plt.savefig(
-        "Visualizations/task5_speedup.png",
-        dpi=300,
-        bbox_inches="tight"
-    )
-
+    plt.grid(True, alpha=0.3)
+    plt.savefig("Visualizations/task5_speedup.png", dpi=300, bbox_inches='tight')
     plt.close()
 
-    print("\nVisualizations Saved:")
+    print("\n✅ Graphs saved in Visualizations folder!")
 
-# Main Function
 
 if __name__ == "__main__":
     run_task5()
